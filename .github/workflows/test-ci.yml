@@ -1,0 +1,43 @@
+name: CI Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Display CI start message
+      run: echo "=== CI 测试开始 ==="
+
+    - name: Check Python version
+      run: python --version
+
+    - name: Install dependencies
+      run: |
+        cd flask-hello-world
+        pip install -r requirements.txt
+
+    - name: Display directory structure
+      run: |
+        echo "Current directory:"
+        pwd
+        echo "Directory structure:"
+        ls -la
+        echo "Flask app directory:"
+        cd flask-hello-world && ls -la
+
+    - name: Display CI completion message
+      run: echo "=== CI 测试完成 ==="
