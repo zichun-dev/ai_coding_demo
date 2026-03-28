@@ -133,3 +133,8 @@ pids
 # Temporary files
 tmp/
 temp/
+
+# Virtual environments
+.venv/
+venv/
+env/
