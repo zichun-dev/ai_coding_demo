@@ -31,7 +31,7 @@ jobs:
     - name: Install dependencies with uv
       run: |
         cd flask-hello-world
-        uv pip install -r requirements.txt
+        uv sync
 
     - name: Display directory structure
       run: |

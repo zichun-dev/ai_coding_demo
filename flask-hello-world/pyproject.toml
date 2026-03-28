@@ -1,0 +1,9 @@
+[project]
+name = "flask-hello-world"
+version = "0.1.0"
+description = "A simple Flask Hello World application"
+requires-python = ">=3.10"
+
+dependencies = [
+    "flask==2.3.3"
+]

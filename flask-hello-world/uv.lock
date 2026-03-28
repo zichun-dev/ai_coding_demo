@@ -51,7 +51,7 @@ wheels = [
 [[package]]
 name = "flask-hello-world"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "flask" },
 ]
