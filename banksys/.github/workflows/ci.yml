@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE_NAME: backsys
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Code format check (Black)
+        run: uv run black --check .
+
+      - name: Code style check (Ruff)
+        run: uv run ruff check .
+
+      - name: Type check (MyPy)
+        run: uv run mypy src/
+        continue-on-error: true
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --cov=src/ --cov-report=xml --cov-fail-under=80
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.11'
+        with:
+          files: ./coverage.xml
+        continue-on-error: true
+
+  cd:
+    needs: ci
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to remote server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT }}
+          command_timeout: 30m
+          script: |
+            set -e
+            
+            echo "=========================================="
+            echo "Starting Docker deployment..."
+            echo "=========================================="
+            
+            PROJECT_DIR="/home/${{ secrets.SSH_USER }}/backsys"
+            IMAGE_NAME="backsys"
+            CONTAINER_NAME="backsys"
+            PORT=6100
+            
+            mkdir -p $PROJECT_DIR
+            cd $PROJECT_DIR
+            
+            mkdir -p ~/.ssh
+            ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+            
+            echo ">>> Pulling latest code..."
+            if [ -d ".git" ]; then
+              git fetch --all
+              git reset --hard origin/main
+              git clean -fd
+            else
+              git clone https://github.com/zichun-dev/ai_coding_demo.git .
+            fi
+            
+            echo ">>> Current version:"
+            git log -1 --oneline
+            
+            if [ ! -f "Dockerfile" ]; then
+              echo "Error: Dockerfile not found"
+              ls -la
+              exit 1
+            fi
+            
+            if ! command -v docker &> /dev/null; then
+              echo ">>> Installing Docker..."
+              curl -fsSL https://get.docker.com | sh
+              systemctl start docker
+              systemctl enable docker
+            fi
+            
+            echo ">>> Building Docker image..."
+            docker build -t $IMAGE_NAME:latest .
+            
+            echo ">>> Stopping old container..."
+            docker stop $CONTAINER_NAME 2>/dev/null || true
+            docker rm $CONTAINER_NAME 2>/dev/null || true
+            
+            echo ">>> Starting new container..."
+            docker run -d \
+              --name $CONTAINER_NAME \
+              --restart unless-stopped \
+              -p $PORT:6100 \
+              $IMAGE_NAME:latest
+            
+            sleep 3
+            
+            if docker ps | grep -q $CONTAINER_NAME; then
+              echo "=========================================="
+              echo "Deployment complete! Service started"
+              echo "Access URL: http://<server-ip>:$PORT"
+              echo "View logs: docker logs $CONTAINER_NAME"
+              echo "=========================================="
+            else
+              echo "Error: Container failed to start"
+              docker logs $CONTAINER_NAME
+              exit 1
+            fi
